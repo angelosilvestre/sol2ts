@@ -1,0 +1,27 @@
+{
+  "name": "sol2ts",
+  "version": "0.0.1",
+  "license": "MIT",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "/dist"
+  ],
+  "scripts": {
+    "test": "jest",
+    "build": "tsc"
+  },
+  "bin": {
+    "sol2ts": "dist/index.js"
+  },
+  "dependencies": {
+    "commander": "^8.3.0",
+    "jest": "^27.4.5",
+    "solc": "^0.8.10"
+  },
+  "devDependencies": {
+    "@babel/preset-env": "^7.16.5",
+    "@babel/preset-typescript": "^7.16.5",
+    "@types/jest": "^27.0.3"
+  }
+}
