@@ -14,13 +14,17 @@ export const generateCommand = new Command()
   )
   .action(async (filename: string, options: { outputDir: string }) => {
     const contractPath = path.join(process.cwd(), filename);
-    const contractName = path.parse(contractPath).name;
     const dir = options.outputDir || path.dirname(contractPath);
-    const contract = generate(contractName, contractPath);
-    const destPath = path.join(dir, `${contractName}.ts`);
-    const abiDestPath = path.join(dir, `${contractName}Abi.ts`);
-    await fs.writeFile(destPath, contract.tsSource, 'utf8');
-    console.log(`generated ${destPath}`);
-    await fs.writeFile(abiDestPath, contract.abi, 'utf8');
-    console.log(`generated ${abiDestPath}`);
+    const contracts = generate(contractPath);
+    for (const contract of contracts) {
+      const destPath = path.join(dir, `${contract.name}.ts`);
+      const abiDestPath = path.join(dir, `${contract.name}Abi.ts`);
+      const bytecodePath = path.join(dir, `${contract.name}ByteCode.ts`);
+      await fs.writeFile(destPath, contract.tsSource, 'utf8');
+      console.log(`generated ${destPath}`);
+      await fs.writeFile(abiDestPath, contract.abi, 'utf8');
+      console.log(`generated ${abiDestPath}`);
+      await fs.writeFile(bytecodePath, contract.bytecode, 'utf8');
+      console.log(`generated ${bytecodePath}`);
+    }
   });

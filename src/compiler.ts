@@ -14,6 +14,7 @@ export interface FunctionParameter {
   internalType: string;
   name: string;
   type: string;
+  components?: FunctionParameter[];
 }
 
 export type StateMutability = 'view' | 'nonpayable' | 'payable';
@@ -31,15 +32,16 @@ export interface AbiItem {
 export type Abi = AbiItem[];
 
 export interface CompiledContract {
+  name: string;
   abi: Abi;
   evm: Evm;
 }
-export const compile = (filePath: string): CompiledContract => {  
+export const compile = (filePath: string): CompiledContract[] => {
   const source = fs.readFileSync(filePath, 'utf8');
   const input = {
     language: 'Solidity',
     sources: {
-      firstContract: {
+      main: {
         content: source,
       },
     },
@@ -50,14 +52,20 @@ export const compile = (filePath: string): CompiledContract => {
         },
       },
     },
-  };  
-  const compiled = JSON.parse(solc.compile(JSON.stringify(input)));
-  if(!compiled.contracts){
-    throw new Error(compiled.errors);
-  }  
-  let contract = Object.values(compiled.contracts.firstContract)[0] as any;
-  return {
-    abi: contract.abi,
-    evm: contract.evm,
   };
+  const compiled = JSON.parse(solc.compile(JSON.stringify(input)));
+  if (!compiled.contracts) {
+    throw new Error(compiled.errors);
+  }
+  let result: CompiledContract[] = [];
+  let compiledContracts = compiled.contracts.main;
+  for (let key in compiledContracts) {
+    let contract = compiledContracts[key];
+    result.push({
+      abi: contract.abi,
+      evm: contract.evm,
+      name: key,
+    });
+  }
+  return result;
 };

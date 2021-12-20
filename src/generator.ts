@@ -17,38 +17,18 @@ export interface GeneratorOptions {
 }
 
 export interface GenerationResult {
+  name: string;
   tsSource: string;
   abi: string;
+  bytecode: string;
+}
+
+interface Argument {
+  name: string;
+  type: string;
 }
 
 const indentation = '  ';
-
-const mapType = (origin: string): string => {
-  switch (origin) {
-    case 'bool':
-      return 'boolean';
-    case 'bytes':
-      return 'string';
-    case 'uint8':
-    case 'uint64':
-    case 'uint256':
-      return 'string';
-    case 'uint256[]':
-      return `string[]`;
-    case 'string':
-      return 'string';
-    case 'address':
-      return 'string';
-    case 'address[]':
-      return 'string[]';
-    default:
-      throw `type ${origin} unkown`;
-  }
-};
-
-const mapOutput = (output: FunctionParameter): string => {
-  return mapType(output.type);
-};
 
 const indent = (level: number): string => {
   return indentation.repeat(level);
@@ -56,6 +36,10 @@ const indent = (level: number): string => {
 
 const generateAbi = (abi: Abi): string => {
   return `export default ${JSON.stringify(abi)};`;
+};
+
+const generateByteCode = (bytecode: string): string => {
+  return `export default '${bytecode}';`;
 };
 
 const equalMembers = (A: InterfaceMember[], B: InterfaceMember[]): boolean => {
@@ -75,6 +59,7 @@ class ContractGenerator {
   private sourceGenerator: SourceGenerator;
   private argCount: number = 0;
   private returnInterfaces: InterfaceDef[] = [];
+  private hasDeployMethod = false;
   constructor() {
     this.sourceGenerator = new SourceGenerator();
   }
@@ -95,72 +80,164 @@ class ContractGenerator {
     });
   };
 
+  generateDefaultDeploy = () => {
+    return `${indent(
+      1
+    )}deploy = async (options: SendOptions): Promise<Contract> => {
+${indent(2)}this.contract = await new this.web3.eth.Contract(this.abi)
+${indent(3)}.deploy({ data: this.bytecode })
+${indent(3)}.send(options);
+${indent(2)}return this.contract;
+${indent(1)}};`;
+  };
+
   private generateDefaultInterfaces = () => {
     this.sourceGenerator.addInterface({
-      name: 'RemoteContract',
+      name: 'ContractInfo',
       members: [
-        {
-          name: 'address',
-          type: 'string',
-        },
         {
           name: 'abi',
           type: 'any',
+        },
+        {
+          name: 'bytecode?',
+          type: 'any',
+        },
+        {
+          name: 'address?',
+          type: 'string',
         },
       ],
     });
   };
 
   generateDeploy = (member: AbiItem): string => {
-    let args = member.inputs.map(this.generateFunctionArg).join(', ');
-    if (args.length > 0) {
-      args += ', ';
-    }
-    args = `abi: any, bytecode: any, ${args}`;
-    return `deploy = async (${args}options: SendOptions): Promise<Contract> => {
-${indent(2)}this.contract = await new this.web3.eth.Contract(abi)
-${indent(3)}.deploy({ data: bytecode })
+    let args = member.inputs.map(this.generateFunctionArg);
+    let argsStr = this.generateArgsStr(args);
+    return `deploy = async (${argsStr}options: SendOptions): Promise<Contract> => {
+${indent(2)}this.contract = await new this.web3.eth.Contract(this.abi)
+${indent(3)}.deploy({ data: this.bytecode })
 ${indent(3)}.send(options);
 ${indent(2)}return this.contract;
 ${indent(1)}};`;
   };
 
-  generateFunctionArg = (arg: FunctionParameter): string => {
+  generateFunctionArg = (arg: FunctionParameter): Argument => {
     let name = arg.name;
     if (name[0] == '_') {
       name = name.slice(1);
     }
-    const type = mapType(arg.type);
+    const type = this.mapType(arg.type);
 
     if (name.length === 0) {
       name = this.genArgName();
     }
-    return `${name}: ${type}`;
+    return { name, type };
   };
 
-  generateContractFunctionCall = (
+  mapType = (origin: string, param?: FunctionParameter): string => {
+    switch (origin) {
+      case 'bool':
+        return 'boolean';
+      case 'bytes':
+        return 'string';
+      case 'uint8':
+      case 'uint64':
+      case 'uint256':
+        return 'BigInt';
+      case 'uint256[]':
+        return `BigInt[]`;
+      case 'string':
+        return 'string';
+      case 'address':
+        return 'string';
+      case 'address[]':
+        return 'string[]';
+      case 'tuple':
+        if (!param) {
+          throw new Error('Tuple info not found');
+        }
+        if (!param.components) {
+          throw new Error('Tuple without components definition');
+        }
+        return this.findOrGenerateFunctionReturnInterface(
+          param.internalType,
+          param.components
+        );
+      default:
+        throw `type ${origin} unkown`;
+    }
+  };
+
+  mapOutput = (output: FunctionParameter): string => {
+    return this.mapType(output.type, output);
+  };
+
+  generateSingleValueViewFunctionCall = (
     member: AbiItem,
-    returnType: string
+    returnType: string,
+    args: Argument[]
   ): string => {
-    if (member.stateMutability === 'view') {
-      if (member.outputs.length <= 1) {
-        return `return this.contract?.methods.${member.name}().call(options);`;
-      } else {
-        let intf = this.returnInterfaces.find((e) => e.name === returnType)!;
-        let arrIndex = 0;
-        const result = `const resultArr : any[] = await this.contract?.methods.${
-          member.name
-        }().call(options);
+    let result = `const result = await this.contract?.methods.${
+      member.name
+    }(${args.map((e) => e.name).join(', ')}).call(options);`;
+    if (returnType === 'BigInt') {
+      result += `\n${indent(2)}return BigInt(result);`;
+    } else {
+      result += `\n${indent(2)}return result;`;
+    }
+    return result;
+  };
+
+  generateMultiValueViewFunctionCall = (
+    member: AbiItem,
+    returnType: string,
+    args: Argument[]
+  ): string => {
+    let intf = this.returnInterfaces.find((e) => e.name === returnType)!;
+    let arrIndex = 0;
+    return `const resultArr : any[] = await this.contract?.methods.${
+      member.name
+    }(${args.map((e) => e.name).join(', ')}).call(options);
 ${indent(2)}let result = {
 ${intf.members
   .map((e) => `${indent(3)}${e.name} : resultArr[${arrIndex++}],`)
   .join('\n')}
 ${indent(2)}}       
 ${indent(2)}return result;`;
-        return result;
-      }
+  };
+
+  generateViewFunctionCall = (
+    member: AbiItem,
+    returnType: string,
+    args: Argument[]
+  ): string => {
+    if (member.outputs.length <= 1) {
+      return this.generateSingleValueViewFunctionCall(member, returnType, args);
     } else {
-      return `return this.contract?.methods.${member.name}().send(options);`;
+      return this.generateMultiValueViewFunctionCall(member, returnType, args);
+    }
+  };
+
+  generateSendFunctionCall = (
+    member: AbiItem,
+    returnType: string,
+    args: Argument[]
+  ): string => {
+    return `return this.contract?.methods.${member.name}(${args
+      .map((e) => e.name)
+      .join(', ')}).send(options);`;
+  };
+
+  generateContractFunctionCall = (
+    member: AbiItem,
+    returnType: string,
+    args: Argument[]
+  ): string => {
+    if (member.stateMutability === 'view') {
+      return this.generateViewFunctionCall(member, returnType, args);
+    } else {
+      return this.generateSendFunctionCall(member, returnType, args);
     }
   };
 
@@ -172,31 +249,72 @@ ${indent(2)}return result;`;
         break;
       case 'constructor':
         memberDecl = this.generateDeploy(member);
+        this.hasDeployMethod = true;
         break;
     }
     return `${indentation}${memberDecl}`;
   };
 
+  generateArgsStr = (args: Argument[]): string => {
+    let argsStr = args
+      .map((e) => {
+        return `${e.name}: ${e.type}`;
+      })
+      .join(', ');
+    if (args.length > 0) {
+      argsStr += ', ';
+    }
+    return argsStr;
+  };
+
   generateFunction = (member: AbiItem): string => {
     this.argCount = 0;
-    let args = member.inputs.map(this.generateFunctionArg).join(', ');
-    if (args.length > 0) {
-      args += ', ';
-    }
+    let args = member.inputs.map(this.generateFunctionArg);
     let returnType = this.generateFunctionReturnType(
       member.name,
       member.outputs
     );
-    let asyncModifier = member.outputs.length > 1 ? 'async ' : '';
-    return `${member.name} = ${asyncModifier}(${args}options?: ${
+    let contractCall = this.generateContractFunctionCall(
+      member,
+      returnType,
+      args
+    );
+    let argsStr = this.generateArgsStr(args);
+    return `${member.name} = async (${argsStr}options?: ${
       member.stateMutability === 'view' ? 'CallOptions' : 'TransactionConfig'
     }): Promise<${returnType}> => {
 ${indent(2)}this.checkInitialized();
-${indent(2)}${this.generateContractFunctionCall(member, returnType)}
+${indent(2)}${contractCall}
 ${indent(1)}};`;
   };
 
   findOrGenerateFunctionReturnInterface = (
+    typeName: string,
+    components: FunctionParameter[]
+  ): string => {
+    // removes 'struct' keyword
+    let declaredName = typeName.substring(7).replace('.', '_');
+    let intf: InterfaceDef | undefined = this.returnInterfaces.find(
+      (e) => e.name === declaredName
+    );
+    if (intf) {
+      return intf.name;
+    }
+    intf = {
+      name: declaredName,
+      members: components.map((e) => {
+        return {
+          name: e.name,
+          type: this.mapOutput(e),
+        };
+      }),
+    };
+    this.returnInterfaces.push(intf);
+    this.sourceGenerator.addInterface(intf);
+    return intf.name;
+  };
+
+  findOrDeclareInterface = (
     functionName: string,
     outputs: FunctionParameter[]
   ): string => {
@@ -212,7 +330,7 @@ ${indent(1)}};`;
       members: outputs.map((e) => {
         return {
           name: e.name,
-          type: mapOutput(e),
+          type: this.mapOutput(e),
         };
       }),
     };
@@ -230,7 +348,7 @@ ${indent(1)}};`;
     }
     let valueType = '';
     if (outputs.length === 1) {
-      valueType = mapOutput(outputs[0]);
+      valueType = this.mapOutput(outputs[0]);
     } else if (outputs.length === 0) {
       valueType = 'void';
     } else {
@@ -247,13 +365,13 @@ ${indent(1)}};`;
 ${indent(1)}private contract: Contract | undefined;
 ${indent(1)}private abi: any | undefined;
 ${indent(1)}private address: string | undefined;
+${indent(1)}private bytecode: any | undefined;
 
-${indent(1)}constructor(web3: Web3, contractInfo?: RemoteContract) {
+${indent(1)}constructor(web3: Web3, contractInfo: ContractInfo) {
 ${indent(2)}this.web3 = web3;
-${indent(2)}if (contractInfo) {
-${indent(3)}this.abi = contractInfo.abi;
-${indent(3)}this.address = contractInfo.address;
-${indent(2)}}
+${indent(2)}this.abi = contractInfo.abi;
+${indent(2)}this.address = contractInfo.address;
+${indent(2)}this.bytecode = contractInfo.bytecode;
 ${indent(1)}}
 
 ${indent(1)}private checkInitialized = () => {
@@ -265,9 +383,12 @@ ${indent(3)}this.contract = new this.web3.eth.Contract(this.abi, this.address);
 ${indent(2)}}
 ${indent(1)}};
 
-${indent(1)}balance = (): Promise<string> => {
+${indent(1)}balance = async (): Promise<BigInt> => {
 ${indent(2)}this.checkInitialized();
-${indent(2)}return this.web3.eth.getBalance(this.contract?.options.address!);
+${indent(
+  2
+)}let result = await this.web3.eth.getBalance(this.contract?.options.address!);
+${indent(2)}return BigInt(result);
 ${indent(1)}};
 
 ${abi.map(this.generateMember).join('\n\n')}
@@ -278,6 +399,7 @@ ${abi.map(this.generateMember).join('\n\n')}
   private generateMainClass = (name: string, abi: Abi) => {
     this.sourceGenerator.addClass(`export default class ${name}Contract {
 ${this.generateMembers(abi)}
+${!this.hasDeployMethod ? this.generateDefaultDeploy() : ''}
 }
 `);
   };
@@ -294,23 +416,28 @@ ${this.generateMembers(abi)}
     return this.sourceGenerator.export();
   };
 
-  generate = (contractName: string, sourceFile: string) => {
-    this.argCount = 0;
-    this.returnInterfaces = [];
-    const contract = compile(sourceFile);
-    const source = this.generateSource(contractName, contract.abi);
-    const abi = generateAbi(contract.abi);
-    return {
-      abi: abi,
-      tsSource: source,
-    };
+  generate = (sourceFile: string) => {
+    const contracts = compile(sourceFile);
+    let result: GenerationResult[] = [];
+    for (const contract of contracts) {
+      this.sourceGenerator = new SourceGenerator();
+      this.returnInterfaces = [];
+      this.hasDeployMethod = false;
+      const source = this.generateSource(contract.name, contract.abi);
+      const abi = generateAbi(contract.abi);
+      const bytecode = generateByteCode(contract.evm.bytecode.object);
+      result.push({
+        name: contract.name,
+        bytecode: bytecode,
+        abi: abi,
+        tsSource: source,
+      });
+    }
+    return result;
   };
 }
 
-export const generate = (
-  contractName: string,
-  sourceFile: string
-): GenerationResult => {
+export const generate = (sourceFile: string): GenerationResult[] => {
   const contractGenerator = new ContractGenerator();
-  return contractGenerator.generate(contractName, sourceFile);
+  return contractGenerator.generate(sourceFile);
 };
