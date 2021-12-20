@@ -34,9 +34,8 @@ export interface CompiledContract {
   abi: Abi;
   evm: Evm;
 }
-export const compile = (filePath: string): CompiledContract => {
+export const compile = (filePath: string): CompiledContract => {  
   const source = fs.readFileSync(filePath, 'utf8');
-  const fileName = path.basename(filePath);
   const input = {
     language: 'Solidity',
     sources: {
@@ -51,8 +50,11 @@ export const compile = (filePath: string): CompiledContract => {
         },
       },
     },
-  };
+  };  
   const compiled = JSON.parse(solc.compile(JSON.stringify(input)));
+  if(!compiled.contracts){
+    throw new Error(compiled.errors);
+  }  
   let contract = Object.values(compiled.contracts.firstContract)[0] as any;
   return {
     abi: contract.abi,

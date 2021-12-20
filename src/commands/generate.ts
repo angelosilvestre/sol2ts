@@ -19,8 +19,8 @@ export const generateCommand = new Command()
     const contract = generate(contractName, contractPath);
     const destPath = path.join(dir, `${contractName}.ts`);
     const abiDestPath = path.join(dir, `${contractName}Abi.ts`);
-    await fs.writeFile(destPath, contract.tsSource);
+    await fs.writeFile(destPath, contract.tsSource, 'utf8');
     console.log(`generated ${destPath}`);
-    await fs.writeFile(abiDestPath, contract.abi);
+    await fs.writeFile(abiDestPath, contract.abi, 'utf8');
     console.log(`generated ${abiDestPath}`);
   });
