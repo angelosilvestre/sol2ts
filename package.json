@@ -16,12 +16,12 @@
   },
   "dependencies": {
     "commander": "^8.3.0",
-    "jest": "^27.4.5",
     "solc": "^0.8.10"
   },
   "devDependencies": {
     "@babel/preset-env": "^7.16.5",
     "@babel/preset-typescript": "^7.16.5",
-    "@types/jest": "^27.0.3"
+    "@types/jest": "^27.0.3",
+    "jest": "^27.4.5"
   }
 }
