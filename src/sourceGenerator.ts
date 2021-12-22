@@ -5,6 +5,7 @@ export interface InterfaceMember {
 
 export interface InterfaceDef {
   name: string;
+  exported: boolean;
   members: InterfaceMember[];
 }
 
@@ -43,7 +44,7 @@ export class SourceGenerator {
   };
 
   private genInterfaceDecl = (intf: InterfaceDef) => {
-    return `interface ${intf.name} {
+    return `${intf.exported ? 'export ' : ''}interface ${intf.name} {
 ${intf.members
   .map((m) => {
     return `  ${m.name}: ${m.type};`;

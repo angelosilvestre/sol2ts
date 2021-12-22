@@ -94,6 +94,7 @@ ${indent(1)}};`;
   private generateDefaultInterfaces = () => {
     this.sourceGenerator.addInterface({
       name: 'ContractInfo',
+      exported: false,
       members: [
         {
           name: 'abi',
@@ -160,7 +161,7 @@ ${indent(1)}};`;
         if (!param.components) {
           throw new Error('Tuple without components definition');
         }
-        return this.findOrGenerateFunctionReturnInterface(
+        return this.findOrGenerateFunctionReturnInterfaceForTuple(
           param.internalType,
           param.components
         );
@@ -288,7 +289,7 @@ ${indent(2)}${contractCall}
 ${indent(1)}};`;
   };
 
-  findOrGenerateFunctionReturnInterface = (
+  findOrGenerateFunctionReturnInterfaceForTuple = (
     typeName: string,
     components: FunctionParameter[]
   ): string => {
@@ -302,6 +303,7 @@ ${indent(1)}};`;
     }
     intf = {
       name: declaredName,
+      exported: true,
       members: components.map((e) => {
         return {
           name: e.name,
@@ -314,7 +316,7 @@ ${indent(1)}};`;
     return intf.name;
   };
 
-  findOrDeclareInterface = (
+  findOrGenerateInterfaceForMultiValueReturn = (
     functionName: string,
     outputs: FunctionParameter[]
   ): string => {
@@ -327,6 +329,7 @@ ${indent(1)}};`;
     intf = {
       name:
         functionName[0].toUpperCase() + functionName.substring(1) + 'Result',
+      exported: true,
       members: outputs.map((e) => {
         return {
           name: e.name,
@@ -352,7 +355,7 @@ ${indent(1)}};`;
     } else if (outputs.length === 0) {
       valueType = 'void';
     } else {
-      valueType = this.findOrGenerateFunctionReturnInterface(
+      valueType = this.findOrGenerateInterfaceForMultiValueReturn(
         functionName,
         outputs
       );
