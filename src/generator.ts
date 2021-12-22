@@ -176,11 +176,22 @@ ${indent(1)}};`;
     return this.mapType(output.type, output);
   };
 
+  generateTupleFunctionCall = (
+    member: AbiItem,
+    returnType: string,
+    args: Argument[]
+  ): string => {
+    return this.generateMultiValueViewFunctionCall(member, returnType, args);
+  };
+
   generateSingleValueViewFunctionCall = (
     member: AbiItem,
     returnType: string,
     args: Argument[]
   ): string => {
+    if (member.outputs[0].components) {
+      return this.generateTupleFunctionCall(member, returnType, args);
+    }
     let result = `const result = await this.contract?.methods.${
       member.name
     }(${args.map((e) => e.name).join(', ')}).call(options);`;
