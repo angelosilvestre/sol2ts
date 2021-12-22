@@ -117,7 +117,9 @@ ${indent(1)}};`;
     let argsStr = this.generateArgsStr(args);
     return `deploy = async (${argsStr}options: SendOptions): Promise<Contract> => {
 ${indent(2)}this.contract = await new this.web3.eth.Contract(this.abi)
-${indent(3)}.deploy({ data: this.bytecode })
+${indent(3)}.deploy({ data: this.bytecode, arguments: [${args
+      .map((e) => e.name)
+      .join(', ')}]})
 ${indent(3)}.send(options);
 ${indent(2)}return this.contract;
 ${indent(1)}};`;
