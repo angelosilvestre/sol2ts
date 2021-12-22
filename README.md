@@ -43,7 +43,6 @@ contract Inbox{
 ```typescript
 import Inbox from './contracts/Inbox';
 import bytecode from './contracts/InboxByteCode';
-import abi from './contracts/InboxAbi';
 import Web3 from 'web3';
 const web3 = new Web3(<provider>);
 
@@ -51,7 +50,7 @@ const deploy = async () => {
   const accounts = await web3.eth.getAccounts();
   const deploymentAccount = accounts[0];
   console.log(`Attempting to deploy using account ${deploymentAccount}`);
-  const inbox = new Inbox(web3, { abi, bytecode });
+  const inbox = new Inbox(web3, { bytecode });
   const contract = await inbox.deploy({
     from: deploymentAccount,
     gas: 1_000_000,
@@ -67,14 +66,13 @@ deploy();
 
 ```typescript
 import Inbox from './contracts/Inbox';
-import abi from './contracts/InboxAbi';
 import Web3 from 'web3';
 const web3 = new Web3(<provider>);
 
 const changeMessage = async () => {
   const accounts = await web3.eth.getAccounts();
   const address = ''; // contract address
-  const inbox = new Inbox(web3, { abi, address });
+  const inbox = new Inbox(web3, { address });
   await inbox.setMessage('My new Message', {
     from: accounts[0],
     gas: 1_000_000,
