@@ -18,6 +18,7 @@ export class SourceGenerator {
   headers: string[];
   imports: Import[];
   interfaces: InterfaceDef[];
+  consts: string[];
   classes: string[];
 
   constructor() {
@@ -25,6 +26,7 @@ export class SourceGenerator {
     this.interfaces = [];
     this.classes = [];
     this.imports = [];
+    this.consts = [];
   }
 
   addImport = (importDef: Import) => {
@@ -41,6 +43,10 @@ export class SourceGenerator {
 
   addClass = (decl: string) => {
     this.classes.push(decl);
+  };
+
+  addConst = (decl: string) => {
+    this.consts.push(decl);
   };
 
   private genInterfaceDecl = (intf: InterfaceDef) => {
@@ -61,6 +67,7 @@ ${intf.members
     let result = this.headers.join('\n');
     result += '\n' + this.imports.map(this.genImport).join('\n');
     result += '\n\n' + this.interfaces.map(this.genInterfaceDecl).join('\n\n');
+    result += '\n\n' + this.consts.join('\n');
     result += '\n\n' + this.classes.join('\n');
     return result.trim();
   };

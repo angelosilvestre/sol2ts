@@ -19,7 +19,6 @@ export interface GeneratorOptions {
 export interface GenerationResult {
   name: string;
   tsSource: string;
-  abi: string;
   bytecode: string;
 }
 
@@ -35,7 +34,7 @@ const indent = (level: number): string => {
 };
 
 const generateAbi = (abi: Abi): string => {
-  return `export default ${JSON.stringify(abi)};`;
+  return `const abi = ${JSON.stringify(abi)};`;
 };
 
 const generateByteCode = (bytecode: string): string => {
@@ -84,7 +83,7 @@ class ContractGenerator {
     return `${indent(
       1
     )}deploy = async (options: SendOptions): Promise<Contract> => {
-${indent(2)}this.contract = await new this.web3.eth.Contract(this.abi)
+${indent(2)}this.contract = await new this.web3.eth.Contract(abi as any)
 ${indent(3)}.deploy({ data: this.bytecode })
 ${indent(3)}.send(options);
 ${indent(2)}return this.contract;
@@ -96,10 +95,6 @@ ${indent(1)}};`;
       name: 'ContractInfo',
       exported: false,
       members: [
-        {
-          name: 'abi',
-          type: 'any',
-        },
         {
           name: 'bytecode?',
           type: 'any',
@@ -116,7 +111,7 @@ ${indent(1)}};`;
     let args = member.inputs.map(this.generateFunctionArg);
     let argsStr = this.generateArgsStr(args);
     return `deploy = async (${argsStr}options: SendOptions): Promise<Contract> => {
-${indent(2)}this.contract = await new this.web3.eth.Contract(this.abi)
+${indent(2)}this.contract = await new this.web3.eth.Contract(abi as any)
 ${indent(3)}.deploy({ data: this.bytecode, arguments: [${args
       .map((e) => e.name)
       .join(', ')}]})
@@ -379,23 +374,23 @@ ${indent(1)}};`;
   generateMembers = (abi: Abi): string => {
     const result = `${indent(1)}private web3: Web3;
 ${indent(1)}private contract: Contract | undefined;
-${indent(1)}private abi: any | undefined;
 ${indent(1)}private address: string | undefined;
 ${indent(1)}private bytecode: any | undefined;
 
 ${indent(1)}constructor(web3: Web3, contractInfo: ContractInfo) {
 ${indent(2)}this.web3 = web3;
-${indent(2)}this.abi = contractInfo.abi;
 ${indent(2)}this.address = contractInfo.address;
 ${indent(2)}this.bytecode = contractInfo.bytecode;
 ${indent(1)}}
 
 ${indent(1)}private checkInitialized = () => {
 ${indent(2)}if (!this.contract) {
-${indent(3)}if (!this.abi || !this.address) {
-${indent(4)}throw new Error('Abi and Address are required');
+${indent(3)}if (!this.address) {
+${indent(4)}throw new Error('Address is required');
 ${indent(3)}}  
-${indent(3)}this.contract = new this.web3.eth.Contract(this.abi, this.address);
+${indent(
+  3
+)}this.contract = new this.web3.eth.Contract(abi as any, this.address);
 ${indent(2)}}
 ${indent(1)}};
 
@@ -424,10 +419,15 @@ ${!this.hasDeployMethod ? this.generateDefaultDeploy() : ''}
     this.sourceGenerator.addHeader('// generated with sol2ts');
   };
 
+  private generateConsts = (abi: Abi) => {
+    this.sourceGenerator.addConst(generateAbi(abi));
+  };
+
   private generateSource = (name: string, abi: Abi): string => {
     this.generateHeader();
     this.generateImports();
     this.generateDefaultInterfaces();
+    this.generateConsts(abi);
     this.generateMainClass(name, abi);
     return this.sourceGenerator.export();
   };
@@ -440,12 +440,10 @@ ${!this.hasDeployMethod ? this.generateDefaultDeploy() : ''}
       this.returnInterfaces = [];
       this.hasDeployMethod = false;
       const source = this.generateSource(contract.name, contract.abi);
-      const abi = generateAbi(contract.abi);
       const bytecode = generateByteCode(contract.evm.bytecode.object);
       result.push({
         name: contract.name,
         bytecode: bytecode,
-        abi: abi,
         tsSource: source,
       });
     }

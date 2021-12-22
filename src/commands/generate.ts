@@ -22,8 +22,6 @@ export const generateCommand = new Command()
       const bytecodePath = path.join(dir, `${contract.name}ByteCode.ts`);
       await fs.writeFile(destPath, contract.tsSource, 'utf8');
       console.log(`generated ${destPath}`);
-      await fs.writeFile(abiDestPath, contract.abi, 'utf8');
-      console.log(`generated ${abiDestPath}`);
       await fs.writeFile(bytecodePath, contract.bytecode, 'utf8');
       console.log(`generated ${bytecodePath}`);
     }
